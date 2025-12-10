@@ -1,0 +1,21 @@
+{
+  "tests": [
+    {
+      "name": "Create new user",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "user_id": "test_123",
+        "username": "TestUser",
+        "avatar": "🎮"
+      },
+      "expectedStatus": 200,
+      "expectedBody": {
+        "user": {
+          "user_id": "test_123"
+        }
+      },
+      "bodyMatcher": "partial"
+    }
+  ]
+}

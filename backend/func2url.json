@@ -1,0 +1,7 @@
+{
+  "gifts-init": "https://functions.poehali.dev/67279a66-83bc-41d0-a7e4-7b670ee8d1ca",
+  "payment": "https://functions.poehali.dev/e4504ea1-2ef2-4ebf-8374-b3b59353cc65",
+  "user": "https://functions.poehali.dev/1e9c9684-23cd-40cc-9d02-a38d77da8527",
+  "payment-confirm": "https://functions.poehali.dev/c9a60843-3e86-4a2e-9cfa-151a53f6a164",
+  "gifts": "https://functions.poehali.dev/ff3478fc-4be9-415d-a8cf-134bed42a410"
+}

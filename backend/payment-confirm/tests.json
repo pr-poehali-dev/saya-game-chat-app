@@ -1,0 +1,15 @@
+{
+  "tests": [
+    {
+      "name": "Confirm payment",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "payment_id": "test_payment_123",
+        "status": "succeeded"
+      },
+      "expectedStatus": 404,
+      "bodyMatcher": "partial"
+    }
+  ]
+}

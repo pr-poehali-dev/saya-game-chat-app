@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -6,15 +6,26 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import Icon from '@/components/ui/icon';
 import { toast } from 'sonner';
 
 interface Player {
-  id: string;
-  name: string;
+  user_id: string;
+  username: string;
   avatar: string;
+  balance: number;
   score: number;
   wins: number;
+}
+
+interface Gift {
+  id: number;
+  name: string;
+  emoji: string;
+  price: number;
+  category: string;
+  rarity: string;
 }
 
 interface Game {
@@ -32,21 +43,40 @@ interface Message {
   time: string;
 }
 
+interface VoiceBot {
+  id: string;
+  name: string;
+  avatar: string;
+  status: 'active' | 'muted' | 'talking';
+}
+
+const API_BASE = 'https://functions.poehali.dev';
+
 const Index = () => {
-  const [currentPlayer] = useState<Player>({
-    id: '1',
-    name: 'Игрок_007',
+  const [currentPlayer, setCurrentPlayer] = useState<Player>({
+    user_id: 'demo_user_1',
+    username: 'Игрок_007',
     avatar: '🎮',
+    balance: 0,
     score: 1250,
     wins: 12,
   });
 
+  const [gifts, setGifts] = useState<Gift[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [roomCode, setRoomCode] = useState('');
   const [messages, setMessages] = useState<Message[]>([
     { id: '1', sender: 'Макс', text: 'Го следующий раунд!', time: '14:32' },
     { id: '2', sender: 'Аня', text: 'Я готова 🔥', time: '14:33' },
   ]);
   const [newMessage, setNewMessage] = useState('');
+  const [depositAmount, setDepositAmount] = useState('100');
+  const [voiceBots, setVoiceBots] = useState<VoiceBot[]>([
+    { id: '1', name: 'БотВася', avatar: '🤖', status: 'active' },
+    { id: '2', name: 'БотМаша', avatar: '🎭', status: 'muted' },
+    { id: '3', name: 'БотДжони', avatar: '🎸', status: 'talking' },
+  ]);
+  const [voiceConnected, setVoiceConnected] = useState(false);
 
   const games: Game[] = [
     { id: '1', title: 'Правда или Действие', players: '2-8', icon: '🎭', color: 'from-pink-500 to-purple-500' },
@@ -56,11 +86,89 @@ const Index = () => {
   ];
 
   const leaderboard: Player[] = [
-    { id: '1', name: 'ПроГеймер', avatar: '👑', score: 2500, wins: 25 },
-    { id: '2', name: 'Чемпион2024', avatar: '🏆', score: 2100, wins: 20 },
-    { id: '3', name: 'Игрок_007', avatar: '🎮', score: 1250, wins: 12 },
-    { id: '4', name: 'ВесельчакМакс', avatar: '😄', score: 980, wins: 8 },
+    { user_id: '1', username: 'ПроГеймер', avatar: '👑', balance: 5000, score: 2500, wins: 25 },
+    { user_id: '2', username: 'Чемпион2024', avatar: '🏆', balance: 3000, score: 2100, wins: 20 },
+    currentPlayer,
+    { user_id: '4', username: 'ВесельчакМакс', avatar: '😄', balance: 800, score: 980, wins: 8 },
   ];
+
+  useEffect(() => {
+    initUser();
+    loadGifts();
+  }, []);
+
+  const initUser = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/1e9c9684-23cd-40cc-9d02-a38d77da8527`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: currentPlayer.user_id,
+          username: currentPlayer.username,
+          avatar: currentPlayer.avatar,
+        }),
+      });
+      const data = await response.json();
+      if (data.user) {
+        setCurrentPlayer({ ...currentPlayer, balance: data.user.balance });
+      }
+    } catch (error) {
+      console.error('Failed to init user:', error);
+    }
+  };
+
+  const loadGifts = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/ff3478fc-4be9-415d-a8cf-134bed42a410?page=1&limit=50`);
+      const data = await response.json();
+      if (data.gifts) {
+        setGifts(data.gifts);
+      }
+    } catch (error) {
+      console.error('Failed to load gifts:', error);
+    }
+  };
+
+  const handleDeposit = async () => {
+    const amount = parseInt(depositAmount);
+    if (amount < 10) {
+      toast.error('Минимальная сумма 10₽');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE}/e4504ea1-2ef2-4ebf-8374-b3b59353cc65`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: currentPlayer.user_id,
+          amount: amount,
+          description: `Пополнение ${amount}₽`,
+        }),
+      });
+      const data = await response.json();
+      
+      if (data.success && data.demo_mode) {
+        setCurrentPlayer({ ...currentPlayer, balance: currentPlayer.balance + amount });
+        toast.success(`Демо: баланс пополнен на ${amount}₽`);
+      } else if (data.payment_url) {
+        window.open(data.payment_url, '_blank');
+        toast.info('Перенаправляем на оплату...');
+      }
+    } catch (error) {
+      toast.error('Ошибка создания платежа');
+    }
+  };
+
+  const handleBuyGift = (gift: Gift) => {
+    if (currentPlayer.balance < gift.price) {
+      toast.error('Недостаточно средств! Пополните баланс');
+      return;
+    }
+    
+    setCurrentPlayer({ ...currentPlayer, balance: currentPlayer.balance - gift.price });
+    toast.success(`Куплен подарок: ${gift.emoji} ${gift.name} за ${gift.price}₽`);
+  };
 
   const handleCreateRoom = () => {
     const code = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -77,7 +185,7 @@ const Index = () => {
     if (newMessage.trim()) {
       const newMsg: Message = {
         id: String(messages.length + 1),
-        sender: currentPlayer.name,
+        sender: currentPlayer.username,
         text: newMessage,
         time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
       };
@@ -85,6 +193,25 @@ const Index = () => {
       setNewMessage('');
     }
   };
+
+  const toggleVoiceChat = () => {
+    setVoiceConnected(!voiceConnected);
+    toast.success(voiceConnected ? 'Отключились от голосового чата' : 'Подключились к голосовому чату');
+  };
+
+  const toggleBotMute = (botId: string) => {
+    setVoiceBots(voiceBots.map(bot => 
+      bot.id === botId 
+        ? { ...bot, status: bot.status === 'muted' ? 'active' : 'muted' as 'active' | 'muted' | 'talking' }
+        : bot
+    ));
+  };
+
+  const filteredGifts = selectedCategory === 'all' 
+    ? gifts 
+    : gifts.filter(g => g.category === selectedCategory);
+
+  const categories = ['all', 'common', 'food', 'animals', 'luxury', 'legendary'];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#1a0f2e] via-[#2d1b4e] to-[#1a0f2e] p-4 md:p-6">
@@ -106,8 +233,11 @@ const Index = () => {
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1">
-                  <h2 className="text-2xl font-bold text-white">{currentPlayer.name}</h2>
-                  <div className="flex gap-3 mt-1">
+                  <h2 className="text-2xl font-bold text-white">{currentPlayer.username}</h2>
+                  <div className="flex gap-3 mt-1 flex-wrap">
+                    <Badge className="bg-gradient-to-r from-yellow-400 to-yellow-500 text-black font-semibold">
+                      💰 {currentPlayer.balance}₽
+                    </Badge>
                     <Badge className="bg-yellow-500 text-black font-semibold">
                       ⭐ {currentPlayer.score}
                     </Badge>
@@ -116,6 +246,52 @@ const Index = () => {
                     </Badge>
                   </div>
                 </div>
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button className="bg-gradient-to-r from-green-500 to-teal-500 hover:from-green-600 hover:to-teal-600">
+                      <Icon name="Wallet" className="mr-2" size={20} />
+                      Пополнить
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="bg-gradient-to-br from-purple-900 to-pink-900 border-purple-500">
+                    <DialogHeader>
+                      <DialogTitle className="text-2xl text-white">Пополнение баланса через СБП</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 mt-4">
+                      <div>
+                        <label className="text-white mb-2 block">Сумма (₽)</label>
+                        <Input
+                          type="number"
+                          value={depositAmount}
+                          onChange={(e) => setDepositAmount(e.target.value)}
+                          className="h-12 text-lg bg-purple-950/50 border-purple-500/50 text-white"
+                          min="10"
+                        />
+                      </div>
+                      <div className="flex gap-2 flex-wrap">
+                        {[100, 500, 1000, 5000].map(amount => (
+                          <Button
+                            key={amount}
+                            onClick={() => setDepositAmount(String(amount))}
+                            variant="outline"
+                            className="border-purple-500 text-white hover:bg-purple-500/20"
+                          >
+                            {amount}₽
+                          </Button>
+                        ))}
+                      </div>
+                      <Button
+                        onClick={handleDeposit}
+                        className="w-full h-12 text-lg bg-gradient-to-r from-green-500 to-teal-500 hover:from-green-600 hover:to-teal-600"
+                      >
+                        Оплатить через СБП
+                      </Button>
+                      <p className="text-sm text-purple-200 text-center">
+                        ИНН: 526098573404 • Безопасная оплата
+                      </p>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -145,9 +321,12 @@ const Index = () => {
             </Card>
 
             <Tabs defaultValue="games" className="animate-fade-in">
-              <TabsList className="grid w-full grid-cols-2 bg-purple-950/50 border border-purple-500/30">
+              <TabsList className="grid w-full grid-cols-3 bg-purple-950/50 border border-purple-500/30">
                 <TabsTrigger value="games" className="text-base font-semibold data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-pink-500">
                   🎮 Игры
+                </TabsTrigger>
+                <TabsTrigger value="gifts" className="text-base font-semibold data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-pink-500">
+                  🎁 Подарки
                 </TabsTrigger>
                 <TabsTrigger value="chat" className="text-base font-semibold data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-pink-500">
                   💬 Чат
@@ -181,6 +360,46 @@ const Index = () => {
                 </div>
               </TabsContent>
 
+              <TabsContent value="gifts" className="mt-4">
+                <div className="space-y-4">
+                  <div className="flex gap-2 flex-wrap">
+                    {categories.map(cat => (
+                      <Button
+                        key={cat}
+                        onClick={() => setSelectedCategory(cat)}
+                        variant={selectedCategory === cat ? 'default' : 'outline'}
+                        className={selectedCategory === cat 
+                          ? 'bg-gradient-to-r from-purple-500 to-pink-500' 
+                          : 'border-purple-500 text-white hover:bg-purple-500/20'
+                        }
+                      >
+                        {cat === 'all' ? 'Все' : cat}
+                      </Button>
+                    ))}
+                  </div>
+
+                  <ScrollArea className="h-[400px]">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3 pr-4">
+                      {filteredGifts.slice(0, 30).map((gift) => (
+                        <Card
+                          key={gift.id}
+                          className="p-4 bg-purple-950/50 border-purple-500/30 hover:border-purple-400 transition-all cursor-pointer hover:scale-105"
+                          onClick={() => handleBuyGift(gift)}
+                        >
+                          <div className="text-center">
+                            <div className="text-4xl mb-2">{gift.emoji}</div>
+                            <div className="text-white font-semibold text-sm mb-1">{gift.name}</div>
+                            <Badge className="bg-gradient-to-r from-yellow-400 to-yellow-500 text-black font-bold">
+                              {gift.price}₽
+                            </Badge>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </div>
+              </TabsContent>
+
               <TabsContent value="chat" className="mt-4">
                 <Card className="p-4 bg-purple-950/50 border-purple-500/30 backdrop-blur-sm">
                   <ScrollArea className="h-[300px] pr-4">
@@ -189,7 +408,7 @@ const Index = () => {
                         <div
                           key={msg.id}
                           className={`p-3 rounded-2xl ${
-                            msg.sender === currentPlayer.name
+                            msg.sender === currentPlayer.username
                               ? 'bg-gradient-to-r from-purple-500 to-pink-500 ml-8'
                               : 'bg-purple-900/50 mr-8'
                           } animate-fade-in`}
@@ -236,9 +455,9 @@ const Index = () => {
               <div className="space-y-3">
                 {leaderboard.map((player, index) => (
                   <div
-                    key={player.id}
+                    key={player.user_id}
                     className={`p-4 rounded-xl ${
-                      player.id === currentPlayer.id
+                      player.user_id === currentPlayer.user_id
                         ? 'bg-gradient-to-r from-purple-500 to-pink-500 animate-pulse-glow'
                         : 'bg-purple-950/30'
                     } transition-all duration-300 hover:scale-105`}
@@ -253,7 +472,7 @@ const Index = () => {
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex-1">
-                        <div className="font-bold text-white">{player.name}</div>
+                        <div className="font-bold text-white">{player.username}</div>
                         <div className="text-sm text-white/70">
                           ⭐ {player.score} · 🏆 {player.wins}
                         </div>
@@ -265,21 +484,62 @@ const Index = () => {
             </Card>
 
             <Card className="p-6 bg-gradient-to-br from-blue-900/50 to-cyan-900/50 border-blue-500/30 backdrop-blur-sm animate-scale-in">
-              <div className="flex items-center gap-2 mb-4">
-                <Icon name="Mic" size={28} className="text-blue-400" />
-                <h2 className="text-xl font-bold text-white">Голосовой чат</h2>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Icon name="Mic" size={28} className="text-blue-400" />
+                  <h2 className="text-xl font-bold text-white">Голосовой чат</h2>
+                </div>
+                {voiceConnected && (
+                  <Badge className="bg-green-500 text-black animate-pulse">
+                    🔴 В эфире
+                  </Badge>
+                )}
               </div>
 
               <Button
-                className="w-full h-14 text-lg font-bold bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 transition-all duration-300"
-                onClick={() => toast.info('Голосовой чат будет доступен в следующем обновлении!')}
+                className={`w-full h-14 text-lg font-bold transition-all duration-300 ${
+                  voiceConnected 
+                    ? 'bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600' 
+                    : 'bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600'
+                }`}
+                onClick={toggleVoiceChat}
               >
-                <Icon name="Mic" className="mr-2" size={24} />
-                Подключиться
+                <Icon name={voiceConnected ? 'MicOff' : 'Mic'} className="mr-2" size={24} />
+                {voiceConnected ? 'Отключиться' : 'Подключиться'}
               </Button>
 
+              {voiceConnected && (
+                <div className="mt-4 space-y-2 animate-fade-in">
+                  <p className="text-sm text-blue-200 font-semibold">Боты в чате:</p>
+                  {voiceBots.map((bot) => (
+                    <div
+                      key={bot.id}
+                      className="flex items-center justify-between p-3 bg-blue-950/30 rounded-lg"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">{bot.avatar}</span>
+                        <span className="text-white font-medium">{bot.name}</span>
+                        {bot.status === 'talking' && (
+                          <Badge className="bg-green-500 text-black text-xs">
+                            🗣️ Говорит
+                          </Badge>
+                        )}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => toggleBotMute(bot.id)}
+                        className="text-white hover:bg-blue-500/20"
+                      >
+                        <Icon name={bot.status === 'muted' ? 'VolumeX' : 'Volume2'} size={16} />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <p className="text-sm text-blue-200 mt-3 text-center">
-                Общайся с друзьями во время игры 🎤
+                Общайся с друзьями и ботами голосом 🎤
               </p>
             </Card>
           </div>
